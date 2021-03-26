@@ -1,0 +1,270 @@
+<html>
+<head><title>五子棋</title>
+<style>
+    *{
+        margin:0;padding:0;
+    }
+    ul,li{
+        list-style: initial;
+    }
+    li{
+        margin-top: 10px;
+        line-height: 18px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #aa3366;
+        font-size:14px;
+        text-indent: 10px;
+    }
+    /*li:nth-child(2n){*/
+    /*    text-align: right;*/
+    /*}*/
+    table{margin:10px auto;}
+    #qipan td{border: 1px solid #151515; height:42px;width:40px;background: burlywood; background-size: 90% 90%; background-position: center center;background-repeat: no-repeat;}
+    #content{background-color: #adbfd9;}
+    #log{width: 100%;height: 580px;overflow: hidden;padding: 10px;box-sizing: border-box;background: burlywood;}
+    #player{width: 100%;height: 50px;overflow: hidden;padding: 10px;box-sizing: border-box;
+        background:#c93756;text-align: center;}
+    #palyerA,palyerB{line-height: 50px;  width: 150px; max-width: 150px;overflow: hidden;float: left}
+    #form{
+        display: flex;
+        padding: 20px;
+    }
+    #form input{
+        background: #fcfcfc;
+        /* border: 1px solid #001b80; */
+        height: 40px;
+        line-height: 40px;
+        width: 555px;
+        border: 1px solid #1e64c9;
+        text-indent: 20px;
+        color:#000;
+        outline: none;
+        font-size:14px;
+    }
+    button{
+        flex: 1;
+        height: 40px;
+        line-height: 40px;
+        color: #fff;
+        text-align: center;
+        padding: 0 20px;
+        background: linear-gradient(0deg, #ffcc22 0%, #40c1ff 100%);
+        font-size:14px;
+        border: none;
+    }
+    #seat,#changeName{
+        float: left;
+        height: 40px;
+        line-height: 40px;
+        color: #fff;
+        text-align: center;
+        padding: 0 20px;
+        background: linear-gradient(0deg, #0f9c22 0%, #0cff99 100%);
+        font-size:14px;
+        border: none;
+        margin: 0 10px;
+    }
+    #change input{
+        background: #fcfcfc;
+        /* border: 1px solid #001b80; */
+        height: 40px;
+        line-height: 40px;
+        width: 90px;
+        border: 1px solid #1e64c9;
+        text-indent: 5px;
+        color:#000;
+        outline: none;
+        font-size:14px;
+    }
+</style>
+</head>
+
+<body>
+<!--定义棋盘-->
+<table cellspacing="0"  cellpadding="0" id="content">
+    <tr>
+        <td>
+            <table cellspacing="0"  cellpadding="0" id="qipan">
+
+            </table>
+        </td>
+        <td style="width:300px;">
+            <div id="player">
+                <div id="palyerA" onclick="seat(1)"> <img src="./img/playA.png"><span>点击加入</span></div>
+                <div id="palyerB" onclick="seat(2)"> <img src="./img/playB.png"><span>点击加入</span></div>
+            </div>
+            <div id="log"></div>
+        </td>
+
+    </tr>
+    <tr>
+        <td>
+            <form id="form">
+                <input type="text" id="msg" size="64"/>
+                <button type="submit">Send</button>
+            </form>
+        </td>
+        <td id="change">
+                <div  id="changeName">改名</div>
+                <input type="text" id="name" size="10"/>
+        </td>
+    </tr>
+</table>
+</body>
+<script>
+    //开始处理websocket
+    var conn;
+    var msg = document.getElementById("msg");
+    var log = document.getElementById("log");
+
+    ///留言板
+    function appendLog(item) {
+        var doScroll = log.scrollTop > log.scrollHeight - log.clientHeight - 1;
+        log.appendChild(item);
+        if (doScroll) {
+            log.scrollTop = log.scrollHeight - log.clientHeight;
+        }
+    }
+    //留言方法
+    document.getElementById("form").onsubmit = function () {
+        if (!conn) {
+            return false;
+        }
+        if (!msg.value) {
+            return false;
+        }
+        console.log(msg)
+        var messageObj = {message:msg.value}
+        conn.send("message|"+JSON.stringify(messageObj));
+        msg.value = "";
+        return false;
+    };
+    //改名方法
+    document.getElementById("changeName").onclick = function () {
+        if (!conn) {
+            return false;
+        }
+        var name = document.getElementById("name");
+        if (!name.value) {
+            return false;
+        }
+        var messageObj = {newName:name.value,type:"changeName"}
+        conn.send("changeName|"+JSON.stringify(messageObj));
+        name.value = "";
+        return false;
+    };
+    //落座方法
+    function seat(position){
+        var messageObj = {position: position,}
+        conn.send("seat|"+JSON.stringify(messageObj));
+    }
+    // document.getElementById("seat").onclick = function () {
+    //     if (!conn) {
+    //         return false;
+    //     }
+    //     var messageObj = {type:"seat"}
+    //     conn.send("seat|"+JSON.stringify(messageObj));
+    //     return false;
+    // };
+
+    if (window["WebSocket"]) {
+        conn = new WebSocket("ws://"+document.domain+":8000/ws");
+        conn.onclose = function (evt) {
+            var item = document.createElement("div");
+            item.innerHTML = "<b>Connection closed.</b>";
+            appendLog(item);
+        };
+        conn.onmessage = function (evt) {
+            var data = JSON.parse(evt.data)
+            console.log(data)
+            if(data.type == "message"){ //聊天消息
+                var item = document.createElement("li");
+                item.innerText = data.user.Name + "说："+data.data.message;
+                appendLog(item);
+            }else if(data.type == "play"){ //落子
+                drew(data.position.x,data.position.y,data.user.Type)
+            }else if(data.type == "radio"){ //广播消息
+                var item = document.createElement("li");
+                item.innerText = data.data.message;
+                appendLog(item);
+            }else if(data.type == "sysn"){ //同步盘面信息
+                sysn(data.data,data.palyerA,data.palyerB)
+            }
+
+        };
+    } else {
+        var item = document.createElement("div");
+        item.innerHTML = "<b>Your browser does not support WebSockets.</b>";
+        appendLog(item);
+    }
+
+
+    //html基础棋盘
+    //先画棋盘
+    var tableobj =document.getElementById("qipan");
+    for (var i=0;i<15;i++){
+        var trobj =document.createElement("tr");
+        for(var j=0;j<15;j++)
+        {
+            var tdobj = document.createElement("td");
+            trobj.appendChild(tdobj);
+        }
+        tableobj.appendChild(trobj);
+    }
+    //下棋方法
+    var btn = document.getElementById('qipan').getElementsByTagName("td");
+    var isClick = true;
+    var player = "A";
+    var nowPlayer = "A"
+    for (var i=0; i<btn.length; i++) {
+        btn[i].addEventListener('click',click,false);
+    }
+    function click() {
+        if (!conn) {
+            return false;
+        }
+        if(isClick) {
+            isClick = false;
+            //事件
+            position = checkPosition(this)
+            var messageObj = {type:"play","position":{"x":position.x,"y":position.y}}
+            console.log(messageObj)
+            conn.send("play|"+JSON.stringify(messageObj));
+            //定时器
+            setTimeout(function() {
+                isClick = true;
+            }, 200);//一秒内不能重复点击
+            this.removeEventListener('click',click,false) //移除点击绑定
+        }
+    }
+    //检查点击点位
+    function checkPosition(e) {
+        var tr =  e.parentNode;
+        var hang = Array.from(tr.querySelectorAll('td'));
+        var lie =  Array.from(tr.parentNode.querySelectorAll('tr'));
+        return {"x":hang.indexOf(e),"y":lie.indexOf(tr)}
+    }
+    //下棋
+    function drew(x,y, player) {
+        console.log(x,y, player)
+        qipan = document.getElementById('qipan');
+        hang = qipan.querySelectorAll('tr')[y];
+        check = hang.querySelectorAll('td')[x];
+        check.style.backgroundImage="url(./img/play"+player+".png)";
+        changePlayer();
+        check.removeEventListener('click',click,false) //移除点击绑定
+    }
+    //切换当前玩家
+    function changePlayer(now = null) {
+        if (now){
+            nowPlayer = now;
+        }else{
+            nowPlayer = nowPlayer=="A"?"B":"A";
+        }
+        return nowPlayer;
+    }
+
+
+
+</script>
+</html>
