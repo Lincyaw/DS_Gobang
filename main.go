@@ -24,13 +24,11 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	//创建棋盘
-	row := make([]int,15)
-	pan:=make([][]int,15)
-	for  k1,_ := range pan {
-		pan[k1] = row
-	}
 	for k,_ := range Chessboard {
-		Chessboard[k] = pan
+		Chessboard[k] = make([][]int,15)
+		for j:=range Chessboard[k]{
+			Chessboard[k][j] = make([]int, 15)
+		}
 	}
 	// 创建静态资源服务
 	fs := http.FileServer(http.Dir("./public"))
@@ -62,7 +60,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	// 注册客户端
 	clients[ws] = &play.User{Name:"用户"+strconv.Itoa(int(rand.Int31n(1000000))),Type:3}
-
+	state := 0
 	for {
 		// Read in a new message as JSON and map it to a Message object
 		messageType,msg,err := ws.ReadMessage()
@@ -85,13 +83,34 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Println("解析消息",data)
 		reData := new(play.Message)
+		reData.User = *clients[ws]
+
 		switch data[0] {
 		case "message":
 			reData.Type = "message"
 			reData.Data, err = play.SendMessage(data[1])
 		case "play":
 			reData.Type = "play"
-			reData.Data, err = play.Play(data[1])
+			if clients[ws].Type != 3{
+				log.Println("state before", state)
+				switch clients[ws].Type {
+				case 1:
+					if state == 1 {
+						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
+						state = 0
+					} else {
+						reData.Data = map[string]string{"message": "不是你下的时候"}
+					}
+				case 2:
+					if state == 0 {
+						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
+						state = 1
+					} else {
+						reData.Data = map[string]string{"message": "不是你下的时候"}
+					}
+				}
+				log.Println("state after", state)
+			}
 		case "seat":
 			reData.Type = "radio"
 			reData.Data, err = play.Seat(clients,ws,data[1])
@@ -105,7 +124,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		//附加信息
-		reData.User = *clients[ws]
 		log.Println(reData)
 
 		// 发送到通道
@@ -121,7 +139,7 @@ func handleMessages() {
 		// 广播消息
 		for client := range clients {
 			re,_ := json.Marshal(data)
-			log.Println("广播：",re)
+			//log.Println("广播：",re)
 			err := client.WriteMessage(websocket.TextMessage, re)
 			if err != nil {
 				log.Printf("error: %v", err)
