@@ -38,6 +38,12 @@ func Play(chessboard [][]int, data string, user int) (map[string]string, error) 
 	}
 	if chessboard[d.X][d.Y] == 0 {
 		chessboard[d.X][d.Y] = user
+		position := pos {
+		    X: d.X,
+		    Y: d.Y,
+		}
+		tmp, _ := json.Marshal(position)
+		re["position"] = string(tmp)
 	} else {
 		re["message"] = "已经在这里下过棋了"
 		return re, errors.New("重复下棋")
@@ -99,3 +105,4 @@ func checkWin(chessboard [][]int, x, y int) bool {
 	}
 	return false
 }
+

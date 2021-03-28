@@ -111,6 +111,7 @@
     </tr>
 </table>
 </body>
+
 <script>
     //开始处理websocket
     var conn;
@@ -182,7 +183,12 @@
                 item.innerText = data.user.Name + "说："+data.data.message;
                 appendLog(item);
             }else if(data.type == "play"){ //落子
-                drew(data.position.x,data.position.y,data.user.Type)
+                console.log("pbh", data)
+                if (!data.data.hasOwnProperty("position")){
+                    return
+                }
+                pos = JSON.parse(data.data.position)
+                drew(pos.x, pos.y,data.user.Type)
             }else if(data.type == "radio"){ //广播消息
                 var item = document.createElement("li");
                 item.innerText = data.data.message;
@@ -207,6 +213,8 @@
         for(var j=0;j<15;j++)
         {
             var tdobj = document.createElement("td");
+            // tdobj._i = i
+            // tdobj._j = j
             trobj.appendChild(tdobj);
         }
         tableobj.appendChild(trobj);
@@ -226,6 +234,7 @@
         if(isClick) {
             isClick = false;
             //事件
+
             position = checkPosition(this)
             var messageObj = {type:"play","position":{"x":position.x,"y":position.y}}
             console.log(messageObj)
@@ -246,13 +255,22 @@
     }
     //下棋
     function drew(x,y, player) {
-        console.log(x,y, player)
-        qipan = document.getElementById('qipan');
-        hang = qipan.querySelectorAll('tr')[y];
-        check = hang.querySelectorAll('td')[x];
-        check.style.backgroundImage="url(./img/play"+player+".png)";
-        changePlayer();
-        check.removeEventListener('click',click,false) //移除点击绑定
+        // console.log(x,y, player)
+        // qipan = document.getElementById('qipan');
+        // hang = qipan.querySelectorAll('tr')[y];
+        // check = hang.querySelectorAll('td')[x];
+        // check.style.backgroundImage="url(./img/play"+player+".png)";
+        // changePlayer();
+        // check.removeEventListener('click',click,false) //移除点击绑定
+        var _img = document.createElement("img")
+        if (player  === 1){
+            _img.setAttribute("src", "./img/playA.png")
+        }
+        else if(player === 2){
+            _img.setAttribute("src", "./img/playB.png")
+        }
+        var btn = document.getElementById('qipan').getElementsByTagName("td");
+        btn[y * 15 + x].appendChild(_img)
     }
     //切换当前玩家
     function changePlayer(now = null) {
