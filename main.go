@@ -129,8 +129,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			log.Printf("任务异常，忽略: %v ", err)
 			continue
 		}
-		//附加信息
 		log.Println(reData)
+
+		// TODO： 添加一局结束后的处理逻辑，例如重启一盘，还是xxx
+
 
 		// 发送到通道
 		broadcast <- *reData
