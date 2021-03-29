@@ -16,13 +16,13 @@ type pos struct {
 	Y int `json:"y"`
 }
 
-func Play(chessboard [][]int, data string, user int) (map[string]string, error) {
+func Play(chessboard [][]int, data string, user int) (map[string]interface{}, error) {
 	log.Println(data)
 	d := pData{
 		Type: "",
 		pos:  pos{},
 	}
-	re := make(map[string]string)
+	re := make(map[string]interface{})
 	err := error(nil)
 	err = json.Unmarshal([]byte(data), &d)
 	if err != nil {
@@ -51,6 +51,9 @@ func Play(chessboard [][]int, data string, user int) (map[string]string, error) 
 
 	if checkWin(chessboard, d.X, d.Y) {
 		re["message"] = "您获胜了！"
+		re["winOrNot"] = 1
+	}else{
+		re["winOrNot"] = 0
 	}
 	for i := 0; i < height; i++ {
 		for j := 0; j < width; j++ {

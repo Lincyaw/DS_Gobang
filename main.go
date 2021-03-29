@@ -87,6 +87,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		reData.User = *clients[ws]
 
 		switch data[0] {
+		// 清空棋盘
+		case "clear":
+			for i := range Chessboard[0] {
+				for j := range Chessboard[0][i] {
+					Chessboard[0][i][j] = 0
+				}
+			}
 		case "message":
 			reData.Type = "message"
 			reData.Data, err = play.SendMessage(data[1])
@@ -100,17 +107,26 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				case 1:
 					if s == 1 {
 						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
-						state <- 0
+						if err != nil {
+							state <- 1
+						} else {
+							state <- 0
+						}
 					} else {
-						state<-s
+						state <- s
 						reData.Data = map[string]string{"message": "不是你下的时候"}
 					}
 				case 2:
 					if s == 0 {
 						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
-						state <- 1
+						// 如果有错误，就还是本方下棋
+						if err != nil {
+							state <- 0
+						} else {
+							state <- 1
+						}
 					} else {
-						state<-s
+						state <- s
 						reData.Data = map[string]string{"message": "不是你下的时候"}
 					}
 				}
@@ -132,7 +148,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		log.Println(reData)
 
 		// TODO： 添加一局结束后的处理逻辑，例如重启一盘，还是xxx
-
 
 		// 发送到通道
 		broadcast <- *reData
