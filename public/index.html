@@ -194,7 +194,12 @@
                         setTimeout(()=>{
                             if(data.user.Type === 1) alert("白子获得了胜利！！！！")
                             else alert("黑子获得了胜利！！！！")
-                            window.location.reload();
+
+                            var btns = document.getElementById('qipan').getElementsByTagName("td");
+                            for(btn of btns){
+                                btn.innerHTML="";
+                            }
+
                             conn.send("clear|xxx");
                         }, 1000)
                     }
