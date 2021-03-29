@@ -188,6 +188,16 @@
                     return
                 }
                 pos = JSON.parse(data.data.position)
+
+                if(data.data.hasOwnProperty("winOrNot")){
+                    if(data.data.winOrNot  === 1){
+                        setTimeout(()=>{
+                            if(data.user.Type === 1) alert("白子获得了胜利！！！！")
+                            else alert("黑子获得了胜利！！！！")
+                        }, 1000)
+                    }
+                }
+
                 drew(pos.x, pos.y,data.user.Type)
             }else if(data.type == "radio"){ //广播消息
                 var item = document.createElement("li");
