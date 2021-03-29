@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"math/rand"
@@ -94,6 +95,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					Chessboard[0][i][j] = 0
 				}
 			}
+			for i := 0; i < len(Chessboard[0]); i++ {
+				for j := 0; j < len(Chessboard[0][i]); j++ {
+					fmt.Print(Chessboard[0][i][j])
+				}
+				fmt.Println("")
+			}
+
 		case "message":
 			reData.Type = "message"
 			reData.Data, err = play.SendMessage(data[1])
