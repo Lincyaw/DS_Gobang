@@ -16,6 +16,7 @@ var Chessboard = make([][][]int, 25) //房间 列 行
 var clients = make(map[*websocket.Conn]*play.User) // 客户端，标识：1,2 玩家，3观众，0未连接
 var broadcast = make(chan play.Message)            // broadcast channel
 var state = make(chan int, 2)
+var roomNumber int = 0
 
 // 只配置了跨域请求，其他配置见文档
 var upgrader = websocket.Upgrader{
@@ -50,7 +51,7 @@ func main() {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
-
+// todo: bug -- 单方可以互相切换黑子和白子，然后自己和自己下棋
 //ws处理器
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	//升级get请求到ws请求
@@ -60,9 +61,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	// Make sure we close the connection when the function returns
 	defer ws.Close()
+	// todo: 连接关闭后，标志该房间被释放
 
 	// 注册客户端
 	clients[ws] = &play.User{Name: "用户" + strconv.Itoa(int(rand.Int31n(1000000))), Type: 3}
+
 	for {
 		// Read in a new message as JSON and map it to a Message object
 		messageType, msg, err := ws.ReadMessage()
@@ -90,17 +93,18 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		switch data[0] {
 		// 清空棋盘
 		case "clear":
-			for i := range Chessboard[0] {
-				for j := range Chessboard[0][i] {
-					Chessboard[0][i][j] = 0
+			for i := range Chessboard[roomNumber] {
+				for j := range Chessboard[roomNumber][i] {
+					Chessboard[roomNumber][i][j] = 0
 				}
 			}
-			for i := 0; i < len(Chessboard[0]); i++ {
-				for j := 0; j < len(Chessboard[0][i]); j++ {
-					fmt.Print(Chessboard[0][i][j])
+			for i := 0; i < len(Chessboard[roomNumber]); i++ {
+				for j := 0; j < len(Chessboard[roomNumber][i]); j++ {
+					fmt.Print(Chessboard[roomNumber][i][j])
 				}
 				fmt.Println("")
 			}
+
 
 		case "message":
 			reData.Type = "message"
@@ -114,7 +118,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				switch clients[ws].Type {
 				case 1:
 					if s == 1 {
-						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
+						reData.Data, err = play.Play(Chessboard[roomNumber], data[1], clients[ws].Type)
 						if err != nil {
 							state <- 1
 						} else {
@@ -126,7 +130,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					}
 				case 2:
 					if s == 0 {
-						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
+						reData.Data, err = play.Play(Chessboard[roomNumber], data[1], clients[ws].Type)
 						// 如果有错误，就还是本方下棋
 						if err != nil {
 							state <- 0
@@ -146,6 +150,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		case "changeName":
 			reData.Type = "radio"
 			reData.Data, err = play.ChangeName(clients[ws], data[1])
+		case "chooseRoom":
+			roomNumber, err = strconv.Atoi(data[1])
+			if err != nil {
+				//todo: 没输入房间号的话，自行分配一个房间号。
+			}
 		default:
 			continue
 		}
@@ -154,8 +163,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		log.Println(reData)
-
-		// TODO： 添加一局结束后的处理逻辑，例如重启一盘，还是xxx
 
 		// 发送到通道
 		broadcast <- *reData
