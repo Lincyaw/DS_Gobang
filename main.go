@@ -12,7 +12,7 @@ import (
 )
 
 var Chessboard = make([][][]int, 25) //房间 列 行
-
+var ChessInUse = make([]bool, 25)
 var clients = make(map[*websocket.Conn]*play.User) // 客户端，标识：1,2 玩家，3观众，0未连接
 var broadcast = make(chan play.Message)            // broadcast channel
 var state = make(chan int, 2)
@@ -51,7 +51,7 @@ func main() {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
-// todo: bug -- 单方可以互相切换黑子和白子，然后自己和自己下棋
+
 //ws处理器
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	//升级get请求到ws请求
@@ -105,11 +105,17 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("")
 			}
 
-
 		case "message":
 			reData.Type = "message"
 			reData.Data, err = play.SendMessage(data[1])
 		case "play":
+			log.Print("以下房间已经被使用：")
+			for i:=range ChessInUse{
+				if ChessInUse[i] {
+					log.Print(i)
+				}
+			}
+			log.Print("\n")
 			reData.Type = "play"
 			if clients[ws].Type != 3 {
 				log.Println("state before", state)
@@ -151,10 +157,21 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			reData.Type = "radio"
 			reData.Data, err = play.ChangeName(clients[ws], data[1])
 		case "chooseRoom":
+			log.Println(data[1])
 			roomNumber, err = strconv.Atoi(data[1])
 			if err != nil {
 				//todo: 没输入房间号的话，自行分配一个房间号。
+				ChessInUse[roomNumber] = true
+			} else {
+				for i := range ChessInUse {
+					if !ChessInUse[i] {
+						roomNumber = i
+						ChessInUse[i] = true
+						break
+					}
+				}
 			}
+
 		default:
 			continue
 		}

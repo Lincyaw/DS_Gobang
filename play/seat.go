@@ -23,40 +23,42 @@ func Seat(clients map[*websocket.Conn]*User, conn *websocket.Conn, msg string) (
 		return re, err
 	}
 	a, b := 0, 0
-	for _, v := range clients {
+	for k, v := range clients {
+		if k == conn && v.Type!=3 {
+			re["message"]  = "你已经坐下了"
+			return re,err
+		}
 		switch v.Type {
 		case 1:
 			a = 1
 		case 2:
 			b = 1
 		}
-		//if k == conn {
-		//	err = errors.New("已经坐下了")
-		//	return
-		//}
-	}
-	if a == 1 && b == 1 {
-		return re, errors.New("已经坐满了")
 	}
 
-	if a == 0 {
+
+	if a==0 && b==0{
+		clients[conn].Type = data["position"]
+	}else if a == 0 {
 		if data["position"] == 1 {
 			clients[conn].Type = 1
+			a = 1
+			re["message"] = clients[conn].Name + "执白子！"
 		} else {
 			re["message"] = "这里已经被坐了"
 			return re, errors.New("这里已经被坐了")
 		}
-		a = 1
-		re["message"] = clients[conn].Name + "执白子！"
 	} else if b == 0 {
 		if data["position"] == 2 {
 			clients[conn].Type = 2
+			b = 1
+			re["message"] = clients[conn].Name + "执黑子！"
 		} else {
 			re["message"] = "这里已经被坐了"
 			return re, errors.New("这里已经被坐了")
 		}
-		b = 1
-		re["message"] = clients[conn].Name + "执黑子！"
+	}else{
+		return re, errors.New("已经坐满了")
 	}
 	if a == 1 && b == 1 { //坐下后坐满了，开局
 		//begin()

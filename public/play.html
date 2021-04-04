@@ -190,7 +190,7 @@
             if(conn && cnt==1){
                 var messageObj = {newName:username,type:"changeName"}
                 conn.send("changeName|"+JSON.stringify(messageObj));
-                conn.send("chooseRoom|"+JSON.stringify(room));
+                conn.send("chooseRoom|"+room);
                 cnt++;
             }
             if(data.type == "message"){ //聊天消息
