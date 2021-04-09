@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"math/rand"
@@ -9,11 +10,13 @@ import (
 	"play/play"
 	"strconv"
 )
+
 var Chessboard = make([][][]int, 25) //房间 列 行
-
-
+var ChessInUse = make([]bool, 25)
 var clients = make(map[*websocket.Conn]*play.User) // 客户端，标识：1,2 玩家，3观众，0未连接
-var broadcast = make(chan play.Message)           // broadcast channel
+var broadcast = make(chan play.Message)            // broadcast channel
+var state = make(chan int, 2)
+var roomNumber int = 0
 
 // 只配置了跨域请求，其他配置见文档
 var upgrader = websocket.Upgrader{
@@ -24,9 +27,9 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	//创建棋盘
-	for k,_ := range Chessboard {
-		Chessboard[k] = make([][]int,15)
-		for j:=range Chessboard[k]{
+	for k, _ := range Chessboard {
+		Chessboard[k] = make([][]int, 15)
+		for j := range Chessboard[k] {
 			Chessboard[k][j] = make([]int, 15)
 		}
 	}
@@ -34,6 +37,7 @@ func main() {
 	fs := http.FileServer(http.Dir("./public"))
 	http.Handle("/", fs)
 
+	state <- 1
 	// 创建websocket路由
 	http.HandleFunc("/ws", handleConnections)
 
@@ -57,16 +61,17 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	// Make sure we close the connection when the function returns
 	defer ws.Close()
+	// todo: 连接关闭后，标志该房间被释放
 
 	// 注册客户端
-	clients[ws] = &play.User{Name:"用户"+strconv.Itoa(int(rand.Int31n(1000000))),Type:3}
-	state := 0
+	clients[ws] = &play.User{Name: "用户" + strconv.Itoa(int(rand.Int31n(1000000))), Type: 3}
+
 	for {
 		// Read in a new message as JSON and map it to a Message object
-		messageType,msg,err := ws.ReadMessage()
-		log.Println("收到消息",string(msg),messageType)
+		messageType, msg, err := ws.ReadMessage()
+		log.Println("收到消息", string(msg), messageType)
 		if err != nil {
-			log.Printf("error: %v - %d", err,messageType)
+			log.Printf("error: %v - %d", err, messageType)
 			delete(clients, ws)
 			break
 		}
@@ -74,38 +79,72 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		if messageType != 1 {
 			continue
 		}
-		data := make([]string,2,2)
-		for k,v := range msg{
+		data := make([]string, 2, 2)
+		for k, v := range msg {
 			if string(v) == "|" {
 				data[0] = string(msg[0:k])
 				data[1] = string(msg[k+1:])
 			}
 		}
-		log.Println("解析消息",data)
+		log.Println("解析消息", data)
 		reData := new(play.Message)
 		reData.User = *clients[ws]
 
 		switch data[0] {
+		// 清空棋盘
+		case "clear":
+			for i := range Chessboard[roomNumber] {
+				for j := range Chessboard[roomNumber][i] {
+					Chessboard[roomNumber][i][j] = 0
+				}
+			}
+			for i := 0; i < len(Chessboard[roomNumber]); i++ {
+				for j := 0; j < len(Chessboard[roomNumber][i]); j++ {
+					fmt.Print(Chessboard[roomNumber][i][j])
+				}
+				fmt.Println("")
+			}
+
 		case "message":
 			reData.Type = "message"
 			reData.Data, err = play.SendMessage(data[1])
 		case "play":
+			log.Print("以下房间已经被使用：")
+			for i:=range ChessInUse{
+				if ChessInUse[i] {
+					log.Print(i)
+				}
+			}
+			log.Print("\n")
 			reData.Type = "play"
-			if clients[ws].Type != 3{
+			if clients[ws].Type != 3 {
 				log.Println("state before", state)
+				// 获取状态
+				s := <-state
 				switch clients[ws].Type {
 				case 1:
-					if state == 1 {
-						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
-						state = 0
+					if s == 1 {
+						reData.Data, err = play.Play(Chessboard[roomNumber], data[1], clients[ws].Type)
+						if err != nil {
+							state <- 1
+						} else {
+							state <- 0
+						}
 					} else {
+						state <- s
 						reData.Data = map[string]string{"message": "不是你下的时候"}
 					}
 				case 2:
-					if state == 0 {
-						reData.Data, err = play.Play(Chessboard[0], data[1], clients[ws].Type)
-						state = 1
+					if s == 0 {
+						reData.Data, err = play.Play(Chessboard[roomNumber], data[1], clients[ws].Type)
+						// 如果有错误，就还是本方下棋
+						if err != nil {
+							state <- 0
+						} else {
+							state <- 1
+						}
 					} else {
+						state <- s
 						reData.Data = map[string]string{"message": "不是你下的时候"}
 					}
 				}
@@ -113,17 +152,33 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 		case "seat":
 			reData.Type = "radio"
-			reData.Data, err = play.Seat(clients,ws,data[1])
+			reData.Data, err = play.Seat(clients, ws, data[1])
 		case "changeName":
 			reData.Type = "radio"
-			reData.Data, err = play.ChangeName(clients[ws],data[1])
-		default:continue
+			reData.Data, err = play.ChangeName(clients[ws], data[1])
+		case "chooseRoom":
+			log.Println(data[1])
+			roomNumber, err = strconv.Atoi(data[1])
+			if err != nil {
+				//todo: 没输入房间号的话，自行分配一个房间号。
+				ChessInUse[roomNumber] = true
+			} else {
+				for i := range ChessInUse {
+					if !ChessInUse[i] {
+						roomNumber = i
+						ChessInUse[i] = true
+						break
+					}
+				}
+			}
+
+		default:
+			continue
 		}
 		if err != nil {
 			log.Printf("任务异常，忽略: %v ", err)
 			continue
 		}
-		//附加信息
 		log.Println(reData)
 
 		// 发送到通道
@@ -138,7 +193,7 @@ func handleMessages() {
 		data := <-broadcast
 		// 广播消息
 		for client := range clients {
-			re,_ := json.Marshal(data)
+			re, _ := json.Marshal(data)
 			//log.Println("广播：",re)
 			err := client.WriteMessage(websocket.TextMessage, re)
 			if err != nil {
@@ -149,4 +204,3 @@ func handleMessages() {
 		}
 	}
 }
-
