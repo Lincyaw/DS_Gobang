@@ -15,8 +15,7 @@ var Chessboard = make([][][]int, 25) //房间 列 行
 var ChessInUse = make([]bool, 25)
 var clients = make(map[*websocket.Conn]*play.User) // 客户端，标识：1,2 玩家，3观众，0未连接
 var broadcast = make(chan play.Message)            // broadcast channel
-var state = make(chan int, 2)
-var roomNumber int = 0
+var state = make([]chan int, 25)
 
 // 只配置了跨域请求，其他配置见文档
 var upgrader = websocket.Upgrader{
@@ -33,11 +32,14 @@ func main() {
 			Chessboard[k][j] = make([]int, 15)
 		}
 	}
+	for k, _ := range state {
+		state[k] = make(chan int, 2)
+		state[k] <- 1
+	}
 	// 创建静态资源服务
 	fs := http.FileServer(http.Dir("./public"))
 	http.Handle("/", fs)
 
-	state <- 1
 	// 创建websocket路由
 	http.HandleFunc("/ws", handleConnections)
 
@@ -54,6 +56,7 @@ func main() {
 
 //ws处理器
 func handleConnections(w http.ResponseWriter, r *http.Request) {
+	var roomNumber int = 0
 	//升级get请求到ws请求
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -110,7 +113,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			reData.Data, err = play.SendMessage(data[1])
 		case "play":
 			log.Print("以下房间已经被使用：")
-			for i:=range ChessInUse{
+			for i := range ChessInUse {
 				if ChessInUse[i] {
 					log.Print(i)
 				}
@@ -118,20 +121,21 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			log.Print("\n")
 			reData.Type = "play"
 			if clients[ws].Type != 3 {
-				log.Println("state before", state)
+				log.Println("state before", state[roomNumber])
+				log.Println("roomNum", roomNumber)
 				// 获取状态
-				s := <-state
+				s := <-state[roomNumber]
 				switch clients[ws].Type {
 				case 1:
 					if s == 1 {
 						reData.Data, err = play.Play(Chessboard[roomNumber], data[1], clients[ws].Type)
 						if err != nil {
-							state <- 1
+							state[roomNumber] <- 1
 						} else {
-							state <- 0
+							state[roomNumber] <- 0
 						}
 					} else {
-						state <- s
+						state[roomNumber] <- s
 						reData.Data = map[string]string{"message": "不是你下的时候"}
 					}
 				case 2:
@@ -139,28 +143,27 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 						reData.Data, err = play.Play(Chessboard[roomNumber], data[1], clients[ws].Type)
 						// 如果有错误，就还是本方下棋
 						if err != nil {
-							state <- 0
+							state[roomNumber] <- 0
 						} else {
-							state <- 1
+							state[roomNumber] <- 1
 						}
 					} else {
-						state <- s
+						state[roomNumber] <- s
 						reData.Data = map[string]string{"message": "不是你下的时候"}
 					}
 				}
-				log.Println("state after", state)
+				log.Println("state after", state[roomNumber])
 			}
 		case "seat":
 			reData.Type = "radio"
-			reData.Data, err = play.Seat(clients, ws, data[1])
+			log.Println("seat", roomNumber)
+			reData.Data, err = play.Seat(clients, ws, data[1], roomNumber)
 		case "changeName":
 			reData.Type = "radio"
 			reData.Data, err = play.ChangeName(clients[ws], data[1])
 		case "chooseRoom":
-			log.Println(data[1])
 			roomNumber, err = strconv.Atoi(data[1])
-			if err != nil {
-				//todo: 没输入房间号的话，自行分配一个房间号。
+			if err == nil {
 				ChessInUse[roomNumber] = true
 			} else {
 				for i := range ChessInUse {
@@ -171,6 +174,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
+			clients[ws].Room = roomNumber
 
 		default:
 			continue
@@ -192,7 +196,10 @@ func handleMessages() {
 		// 接受消息
 		data := <-broadcast
 		// 广播消息
-		for client := range clients {
+		for client, user := range clients {
+			if user.Room != data.Room {
+				continue
+			}
 			re, _ := json.Marshal(data)
 			//log.Println("广播：",re)
 			err := client.WriteMessage(websocket.TextMessage, re)

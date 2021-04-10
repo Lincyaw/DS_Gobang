@@ -164,6 +164,7 @@
     //落座方法
     function seat(position){
         var messageObj = {position: position,}
+        conn.send("chooseRoom|"+room);
         conn.send("seat|"+JSON.stringify(messageObj));
     }
     // document.getElementById("seat").onclick = function () {
@@ -190,7 +191,6 @@
             if(conn && cnt==1){
                 var messageObj = {newName:username,type:"changeName"}
                 conn.send("changeName|"+JSON.stringify(messageObj));
-                conn.send("chooseRoom|"+room);
                 cnt++;
             }
             if(data.type == "message"){ //聊天消息

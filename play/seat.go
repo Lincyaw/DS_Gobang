@@ -12,55 +12,61 @@ var MsgNewName = map[string]string{
 	"new": "",
 }
 
-func Seat(clients map[*websocket.Conn]*User, conn *websocket.Conn, msg string) (map[string]string, error) {
+func Seat(clients map[*websocket.Conn]*User, conn *websocket.Conn, msg string, roomNum int) (map[string]string, error) {
 	data := map[string]int{"position": 0}
 	err := error(nil)
 	re := make(map[string]string)
 	err = json.Unmarshal([]byte(msg), &data)
-	log.Println(data, msg)
+	log.Println(data, msg, roomNum)
 	if err != nil {
 		log.Println("无法解析的报文：", msg, "error:", err)
 		return re, err
 	}
-	a, b := 0, 0
+	a, b := [25]int{}, [25]int{}
+	for k, _ := range a {
+		a[k] = 0
+		b[k] = 0
+	}
 	for k, v := range clients {
-		if k == conn && v.Type!=3 {
-			re["message"]  = "你已经坐下了"
-			return re,err
+		if k == conn {
+			if v.Type != 3 {
+				re["message"] = "你已经坐下了"
+				return re, err
+			}
+			switch v.Type {
+			case 1:
+				a[roomNum] = 1
+			case 2:
+				b[roomNum] = 1
+			}
 		}
-		switch v.Type {
-		case 1:
-			a = 1
-		case 2:
-			b = 1
-		}
+
 	}
 
-
-	if a==0 && b==0{
+	if a[roomNum] == 0 && b[roomNum] == 0 {
 		clients[conn].Type = data["position"]
-	}else if a == 0 {
+	} else if a[roomNum] == 0 {
 		if data["position"] == 1 {
 			clients[conn].Type = 1
-			a = 1
+			a[roomNum] = 1
 			re["message"] = clients[conn].Name + "执白子！"
 		} else {
 			re["message"] = "这里已经被坐了"
 			return re, errors.New("这里已经被坐了")
 		}
-	} else if b == 0 {
+	} else if b[roomNum] == 0 {
 		if data["position"] == 2 {
 			clients[conn].Type = 2
-			b = 1
+			b[roomNum] = 1
 			re["message"] = clients[conn].Name + "执黑子！"
 		} else {
 			re["message"] = "这里已经被坐了"
 			return re, errors.New("这里已经被坐了")
 		}
-	}else{
+	} else {
 		return re, errors.New("已经坐满了")
 	}
-	if a == 1 && b == 1 { //坐下后坐满了，开局
+	if a[roomNum] == 1 && b[roomNum] == 1 { //坐下后坐满了，开局
 		//begin()
 		fmt.Println("开局")
 	}
