@@ -45,6 +45,7 @@ func Seat(clients map[*websocket.Conn]*User, conn *websocket.Conn, msg string, r
 
 	if a[roomNum] == 0 && b[roomNum] == 0 {
 		clients[conn].Type = data["position"]
+		re["message"] = clients[conn].Name + "进入房间！"
 	} else if a[roomNum] == 0 {
 		if data["position"] == 1 {
 			clients[conn].Type = 1
